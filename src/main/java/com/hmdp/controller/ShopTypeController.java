@@ -32,7 +32,7 @@ ShopTypeController {
 
     @GetMapping("list")
     public Result queryTypeList() {
-        Result typelist = typeService.queryType();
-        return Result.ok(typelist);
+
+        return typeService.queryType();
     }
 }

@@ -35,22 +35,21 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
     private ShopTypeMapper shopTypeMapper;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+
     @Override
     public Result queryType() {
         //从redis中查询店铺类型
-        String key = RedisConstants.CACHE_SHOP_KEY + UUID.randomUUID().toString(true);
+        String key = RedisConstants.CACHE_SHOP_TYPE_KEY;
         String shopTypeJson = stringRedisTemplate.opsForValue().get(key);
         //查看redis中是否存在
         if (StrUtil.isNotBlank(shopTypeJson)) {
-            ShopType shopType = JSONUtil.toBean(shopTypeJson, ShopType.class);
+           List<ShopType> shopType = JSONUtil.toList(shopTypeJson, ShopType.class);
             return Result.ok(shopType);
         }
         //不存在在数据库里查询
         List<ShopType> shopTypelist = query().orderByAsc("sort").list();
         //查看是否存在
-        if (shopTypelist == null || shopTypelist.size() == 0) {
+        if (shopTypelist == null) {
             return Result.fail("查询失败，没有该商铺类型");
         }
         //存入redis中
