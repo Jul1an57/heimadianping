@@ -13,7 +13,7 @@ import javax.annotation.Resource;
 
 @Configuration
 @Slf4j
-public class MvcConfig implements WebMvcConfigurer {
+public class    MvcConfig implements WebMvcConfigurer {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -25,7 +25,7 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/shop/**",
                         "/shop-type/**",
                         "/upload/**",
-                        "voucher/**",
+                        "/voucher/**",
                         "/user/code",
                         "/user/login"
                 ).order(1);

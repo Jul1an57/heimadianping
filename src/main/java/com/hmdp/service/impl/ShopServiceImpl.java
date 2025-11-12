@@ -11,6 +11,7 @@ import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.CatchClient;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisData;
 import io.netty.util.internal.StringUtil;
@@ -42,14 +43,16 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private CatchClient catchClient;
     @Override
     public Result queryById(Long id) {
         //缓存穿透
-
+        Shop shop = catchClient.queryWithPassThrough(CACHE_SHOP_KEY, id, Shop.class, this::getById, CACHE_SHOP_TTL, TimeUnit.MINUTES);
         //互斥锁解决缓存击穿
 //        Shop shop = queryWithMutext(id);
         //逻辑过期解决缓存击穿
-        Shop shop = queryWithLogicalExpire(id);
+        //Shop shop = queryWithLogicalExpire(id);
         if(shop == null){
             return Result.fail("店铺不存在");
         }

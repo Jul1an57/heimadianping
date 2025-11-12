@@ -16,12 +16,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
+
+
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+
+import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TTL;
 
 @Component
 @Slf4j
 public class CatchClient {
-
 
     //因为是final构造，不可更改，所以采用构造器构造，而不是自动注入
     private final StringRedisTemplate stringRedisTemplate;
@@ -42,9 +47,6 @@ public class CatchClient {
         stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(redisData));
     }
 
-
-
-    //redis穿透的店铺查询
     public <R,ID>R queryWithPassThrough(
             String keyPrefix, ID id, Class<R> type, Function<ID,R> dbFallback,
             Long time, TimeUnit unit
@@ -59,18 +61,19 @@ public class CatchClient {
         //命中的是否为空置
         if(json != null){
             return null;
-
         }
         R r = dbFallback.apply(id);
         //不在，根据id在数据库查询，
         if(r == null){
-            stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,"", RedisConstants.CACHE_NULL_TTL,TimeUnit.MINUTES);
+            stringRedisTemplate.opsForValue().set(key,"", RedisConstants.CACHE_NULL_TTL,TimeUnit.MINUTES);
             return null;
         }
         this.set(key, r, time, unit);
 
         return r;
     }
+
+
 
     //线程池
     private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);

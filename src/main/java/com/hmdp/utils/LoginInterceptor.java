@@ -64,14 +64,13 @@ public class LoginInterceptor implements HandlerInterceptor {
 //        stringRedisTemplate.expire(RedisConstants.LOGIN_USER_KEY+token,RedisConstants.LOGIN_USER_TTL, TimeUnit.MINUTES);
 //        return true;
 
+
+        //从threadlocal中查询是否有对应的用户信息有就拦截
         if(UserHolder.getUser() == null){
             response.setStatus(401);
             return false;
         }
-
         return true;
-
-
     }
 
     @Override

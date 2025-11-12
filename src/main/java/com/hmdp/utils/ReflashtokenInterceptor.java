@@ -33,6 +33,7 @@ public class ReflashtokenInterceptor implements HandlerInterceptor {
         //获取redis中的用户
         Map<Object, Object> usermap = stringRedisTemplate.opsForHash().entries(RedisConstants.LOGIN_USER_KEY + token);
         //检验用户判断
+        //空放行是因为有的界面不需要用户登录就可以使用所以不拦截
         if (usermap.isEmpty()) {
           return true;
         }
