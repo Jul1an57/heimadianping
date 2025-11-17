@@ -16,5 +16,7 @@ public interface IVoucherOrderService extends IService<VoucherOrder> {
 
 
     //实现秒杀下单
-    Result scvillVoucher(Long voucherId);
+    Result scvillVoucher(Long voucherId) throws InterruptedException;
+
+    Result createVoucherOrder(Long voucherId);
 }
