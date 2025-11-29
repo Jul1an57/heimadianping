@@ -7,6 +7,8 @@
 local voucherId = ARGV[1]
 --[[用户id]]
 local userId = ARGV[2]
+--[[订单ID]]
+local orderId = ARGV[3]
 
 local stockKey ='seckill:stock'..voucherId
 local orderKey = 'seckill:order'..voucherId
@@ -19,4 +21,5 @@ if(redis.call('sismember',orderKey,userId) ==1 )then
 end
 redis.call('incrby',stockKey,-1)
 redis.call('sadd',orderKey,userId)
+redis.call('xadd','stream.orders','*','userId',userId,'voucherId','id',orderId)
 return 0

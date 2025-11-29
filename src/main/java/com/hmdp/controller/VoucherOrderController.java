@@ -28,6 +28,6 @@ public class VoucherOrderController {
     public Result seckillVoucher(@PathVariable("id") Long voucherId) throws InterruptedException {
 
 
-        return voucherOrderService.scvillVoucher(voucherId);
+        return voucherOrderService.seckillVoucher(voucherId);
     }
 }

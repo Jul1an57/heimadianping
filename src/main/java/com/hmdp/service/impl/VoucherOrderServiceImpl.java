@@ -1,5 +1,6 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.VoucherOrder;
 import com.hmdp.mapper.VoucherOrderMapper;
@@ -14,6 +15,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.connection.stream.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -21,7 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
+import java.time.Duration;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 
 /**
@@ -52,14 +57,73 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
     }
 
-    private BlockingQueue<VoucherOrder> orderTask = new ArrayBlockingQueue<>(1024 * 1024);
+
     private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
     @PostConstruct
     private void init(){
         SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
     }
-
+    String  queueName = "streams.order";
+    
     private class VoucherOrderHandler implements Runnable {
+
+        @Override
+        public void run() {
+            while(true){
+
+                try {
+
+                List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
+                        Consumer.from("g1", "c1"),
+                        StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
+                        StreamOffset.create(queueName, ReadOffset.lastConsumed())
+                );
+                if(list == null || list.isEmpty()){
+                    continue;
+                }
+                MapRecord<String, Object, Object> record = list.get(0);
+                Map<Object,Object> values = record.getValue();
+                VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values,new VoucherOrder(),true);
+
+                    handleVoucherOrder(voucherOrder);
+                    stringRedisTemplate.opsForStream().acknowledge(queueName,"g1",record.getId());
+                } catch (Exception e) {
+                    log.error("处理错误订单",e);
+                    handlePendingList();
+                }
+
+            }
+        }
+
+        private void handlePendingList() {
+            while(true) {
+                try {
+                    List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
+                            Consumer.from("g1", "c1"),
+                            StreamReadOptions.empty().count(1).block(Duration.ofSeconds(0)),
+                            StreamOffset.create(queueName, ReadOffset.lastConsumed())
+                    );
+                    if (list == null || list.isEmpty()) break;
+                    MapRecord<String, Object, Object> record = list.get(0);
+                    Map<Object, Object> values = record.getValue();
+                    VoucherOrder voucherorder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
+                    handleVoucherOrder(voucherorder);
+                    stringRedisTemplate.opsForStream().acknowledge(queueName, "g1", record.getId());
+                } catch (Exception e) {
+                    log.error("处理pending-list订单异常", e);
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException interruptedException) {
+                        interruptedException.printStackTrace();
+                    }
+                }
+
+            }
+        }
+
+
+
+   /* private class VoucherOrderHandler implements Runnable {
 
         @Override
         public void run() {
@@ -73,7 +137,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                         log.error("订单异常",e);
                     }
                 }
-        }
+        }*/
+
+
 
         private void handleVoucherOrder(VoucherOrder voucherorder) throws InterruptedException {
 
@@ -91,7 +157,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
     }
     private IVoucherOrderService proxy;
-    @Override
+/*    @Override
     public Result seckillVoucher(Long voucherId) throws InterruptedException {
 
         Long userId = UserHolder.getUser().getId();
@@ -117,7 +183,30 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         proxy = (IVoucherOrderService) AopContext.currentProxy();
 
         return Result.ok(orderId);
+    }*/
+    //把阻塞队列换成消息队列
+    @Override
+    public Result seckillVoucher(Long voucherId) throws InterruptedException {
+
+        Long userId = UserHolder.getUser().getId();
+        Long orderId = redisIDWorker.nextId("order");
+
+        Long result = stringRedisTemplate.execute(
+                SECKILL_SCRIPT,
+                Collections.emptyList(),
+                voucherId.toString(),userId.toString(),String.valueOf(orderId)
+        );
+
+        int i = result.intValue();
+        if(i != 0){
+            return Result.fail(i == 1?"库存不足":"不能重复下单");
+        }
+
+        proxy = (IVoucherOrderService) AopContext.currentProxy();
+
+        return Result.ok(orderId);
     }
+
 
   /* @Override
     public Result scvillVoucher(Long voucherId) throws InterruptedException {
@@ -150,14 +239,14 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
 
         //synchronized(userid.toString().intern()) {}
-        *//*
-         *这个return返回的是this.createVoucherOrder(voucherId);这样是有问题的，这里this相当于调用的是原对象
-         * 因为注解的事务是由aop进行代理的，所以要采用代理对象而不是原对象.(代理对象就是对原对象的一个封装，添加了一些功能)
-         *解决方法：
-         * 1.自己注入自己，注入自己后，调用一个方法获取bean代理对象
-         * 2.用aopcontext获取自己的代理对象
-         * *//*
-        //return this.createVoucherOrder(voucherId);
+
+         这个return返回的是this.createVoucherOrder(voucherId);这样是有问题的，这里this相当于调用的是原对象
+          因为注解的事务是由aop进行代理的，所以要采用代理对象而不是原对象.(代理对象就是对原对象的一个封装，添加了一些功能)
+         解决方法：
+         1.自己注入自己，注入自己后，调用一个方法获取bean代理对象
+          2.用aopcontext获取自己的代理对象
+
+        return this.createVoucherOrder(voucherId);
 
         //用分布式锁的方式来解决(自己手写版)
 //        SimpleRedisLock lock = new SimpleRedisLock("order" + userid, stringRedisTemplate);
@@ -173,9 +262,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 //        } finally {
 //            lock.unlock();
 //        }
-        *//*
+
          * 采用redisson实现分布式锁
-         * *//*
+         *
         RLock lock = redissonClient.getLock("lock:order" + userid);
 
         boolean islock = lock.tryLock(1, 10, TimeUnit.SECONDS);
